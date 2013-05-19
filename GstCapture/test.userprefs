@@ -1,0 +1,14 @@
+﻿<Properties>
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="test\MainWindow.cs">
+    <Files>
+      <File FileName="test\Main.cs" Line="53" Column="2" />
+      <File FileName="test\MainWindow.cs" Line="248" Column="2" />
+      <File FileName="E:\Diplom\gstreamer-sharp-0.9.2\samples\MP3LaunchParse.cs" Line="40" Column="36" />
+    </Files>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+</Properties>
