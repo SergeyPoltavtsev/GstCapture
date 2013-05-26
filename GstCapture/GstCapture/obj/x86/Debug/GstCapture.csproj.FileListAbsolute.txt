@@ -1,0 +1,5 @@
+C:\Users\Admin\Documents\Projects\GstCapture\GstCapture\obj\x86\Debug\test.exe
+C:\Users\Admin\Documents\Projects\GstCapture\GstCapture\obj\x86\Debug\test.pdb
+C:\Users\Admin\Documents\Projects\GstCapture\GstCapture\bin\Debug\test.exe
+C:\Users\Admin\Documents\Projects\GstCapture\GstCapture\bin\Debug\test.pdb
+C:\Users\Admin\Documents\Projects\GstCapture\GstCapture\obj\x86\Debug\GstCapture.csprojResolveAssemblyReference.cache

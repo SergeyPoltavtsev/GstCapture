@@ -14,6 +14,7 @@ public partial class MainWindow: Gtk.Window
 	static String path = null, dir = null;
 	public static bool isRecording;
 	public const ulong timeout = 3000000000; // 3s = 3000000000ns
+	string platform;
 
 
 
@@ -21,8 +22,23 @@ public partial class MainWindow: Gtk.Window
 	{
 
 		Build ();
-		MicScan ();
-		CameraScan ();
+		PLanformIdentification ();
+		switch (platform) {
+			case "Win":
+				MicScan ("dshowaudiosrc", "device-name");
+				CameraScanWin ();
+			break;
+			case "Unix":
+				MicScan ("pulsesrc", "device");
+				CameraScanWin ();
+			break;
+			default:
+			MessageDialog md = new MessageDialog (null, DialogFlags.Modal, MessageType.Info, ButtonsType.Ok, "Не известна аппаратная платформа");
+			break;
+		
+		}
+
+
 
 		txtFolderOut.Text = "E:/Diplom/Video"; //Environment.GetFolderPath (Environment.SpecialFolder.Personal);
 
@@ -47,12 +63,38 @@ public partial class MainWindow: Gtk.Window
 
 	}
 
-	private void MicScan()
+
+
+
+
+	private void PLanformIdentification()
 	{
-		Gst.Element e = Gst.ElementFactory.Make("dshowaudiosrc");
+		OperatingSystem os = Environment.OSVersion;
+		PlatformID     pid = os.Platform;
+		switch (pid) 
+		{
+			case PlatformID.Win32NT:
+			case PlatformID.Win32S:
+			case PlatformID.Win32Windows:
+			case PlatformID.WinCE:
+			platform = "Win";
+			break;
+			case PlatformID.Unix:
+			platform = "Unix";
+			break;
+			default:
+			platform = "InvalidPlatform";
+			break;
+		}
+
+	}
+
+	private void MicScan(string source, string devprop )
+	{
+		Gst.Element e = Gst.ElementFactory.Make(source);
 		Gst.Interfaces.PropertyProbeAdapter ppa = new Gst.Interfaces.PropertyProbeAdapter(e.Handle);
 
-		object[] devices = ppa.ProbeAndGetValues("device-name");
+		object[] devices = ppa.ProbeAndGetValues(devprop);
 
 		foreach (object dev in devices)
 		{
@@ -63,7 +105,8 @@ public partial class MainWindow: Gtk.Window
 
 	}
 
-	private void CameraScan ()
+
+	private void CameraScanWin()
 	{
 
 		Gst.Element e = Gst.ElementFactory.Make ("dshowvideosrc");
@@ -114,6 +157,29 @@ public partial class MainWindow: Gtk.Window
 		}
 	}
 
+
+	private void CameraScanUnix ()
+	{
+
+		Gst.Element e = Gst.ElementFactory.Make ("v4l2src");
+		Gst.Interfaces.PropertyProbeAdapter ppa = new Gst.Interfaces.PropertyProbeAdapter (e.Handle);
+
+		object[] devices = ppa.ProbeAndGetValues ("device");
+
+		FillCombo (cbxCamera);
+
+		foreach (String dev in devices) {
+
+			Gst.Fraction f = new Gst.Fraction(30,1);
+
+			cameras [dev] = new GstCapture.cameraDevice (dev, f , 320 , 240);
+
+			cbxCamera.AppendText (dev);	
+
+
+		}
+	}
+
 	protected void btnRec_Clicked (object sender, EventArgs e)
 	{
 		if (!isRecording)
@@ -124,30 +190,47 @@ public partial class MainWindow: Gtk.Window
 
 				if (result == ResponseType.Yes) {
 					md.Destroy ();
-					StartRecording ();
+
+					switch (platform) {
+						case "Win":
+						StartRecordingWin ();
+						break;
+						case "Unix":
+						StartRecordingUnix ();
+						break;
+
+
+					}
+
 				} else
 					md.Destroy ();
 			} 
 			else 
 			{
-				StartRecording();
+				switch (platform) {
+					case "Win":
+					StartRecordingWin ();
+					break;
+					case "Unix":
+					StartRecordingUnix ();
+					break;
+				}
 			}
 		}
 		else
 		{
 			StopRecording();
+			btnRec.Label = "Rec";
+			lblStatus.Text = "Stop record";
 		}
 
 
 	}
 
-	public void StartRecording()
+	public void StartRecordingWin()
 	{
 		if (txtFolderOut.Text != String.Empty && Directory.Exists(txtFolderOut.Text.Trim()))
 		{
-			GstCapture.cameraDevice cDev = cameras[cbxCamera.ActiveText];
-			String sDev = "yes";
-			String aDev = cbxMic.ActiveText;
 			String _path = txtFolderOut.Text.Trim();
 
 			DateTime dt = DateTime.Now;
@@ -158,8 +241,9 @@ public partial class MainWindow: Gtk.Window
 			cargs = null,
 			sargs = null;
 
-			if ((aDev != null) && ckbxMic.Active)
+			if ((cbxMic.ActiveText != null) && ckbxMic.Active)
 			{
+				String aDev = cbxMic.ActiveText;
 				//aargs = String.Format(" dshowaudiosrc device-name=\"{0}\"", w.GetString(Encoding.UTF8.GetBytes(aDev)));
 				aargs = String.Format(" directsoundsrc");
 				//aargs += " ! audio/x-raw-int, rate = 44100, channels = 1, depth = 16 ! queue ! faac ! tee name = audio";
@@ -174,8 +258,9 @@ public partial class MainWindow: Gtk.Window
 			Directory.SetCurrentDirectory(path);
 			Environment.SetEnvironmentVariable("GST_DEBUG", "3");
 
-			if (cDev != null && ckbxCamera.Active)
+			if (cbxCamera.Active != -1 && ckbxCamera.Active)
 			{
+				GstCapture.cameraDevice cDev = cameras[cbxCamera.ActiveText];
 				int gop = 450;
 
 				cargs = " flvmux name=camera ! filesink location=\"camera.flv\"";
@@ -216,9 +301,117 @@ public partial class MainWindow: Gtk.Window
 
 			try
 			{
+				string final = cargs + sargs + aargs;
 				gstRecording = (Gst.Pipeline)Gst.Parse.Launch(cargs + sargs + aargs);
 				lblStatus.Text = "Recording ...";
+				btnRec.Label = "Stop";
 			
+			}
+			catch (Exception error)
+			{
+				GstCapture.MessageBox.Show(String.Format("{0}: {1}", error.Message, cargs + sargs + aargs));
+			}
+
+			if (gstRecording != null)
+			{
+				gstRecording.SetState(Gst.State.Playing);
+
+				Gst.State s;
+				gstRecording.GetState(out s, timeout);
+
+				isRecording = true;
+
+			}
+
+			Directory.SetCurrentDirectory(_path);
+		}
+	}
+
+
+	public void StartRecordingUnix()
+	{
+		if (txtFolderOut.Text != String.Empty && Directory.Exists(txtFolderOut.Text.Trim()))
+		{
+			GstCapture.cameraDevice cDev = cameras[cbxCamera.ActiveText];
+			//String sDev = "yes";
+			String aDev = cbxMic.ActiveText;
+			String _path = txtFolderOut.Text.Trim();
+
+			DateTime dt = DateTime.Now;
+
+			//Encoding w = Encoding.GetEncoding("windows-1251"); // HACK
+
+			String aargs = null,
+			cargs = null,
+			sargs = null;
+
+
+			if ((aDev != null) && ckbxMic.Active)
+			{
+
+
+				//aargs = String.Format(" dshowaudiosrc device-name=\"{0}\"", w.GetString(Encoding.UTF8.GetBytes(aDev)));
+				aargs = String.Format(" pulsesrc");
+				//aargs += " ! audio/x-raw-int, rate = 44100, channels = 1, depth = 16 ! queue ! faac ! tee name = audio";
+				aargs += " ! audio/x-raw-int, rate = 44100, channels = 1, depth = 16 ! queue ! ffenc_adpcm_swf ! tee name = audio";
+
+			}
+
+			dir = String.Format("{0:yyyy-MM-dd_HH-mm-ss}", dt);
+			path = Directory.CreateDirectory(
+				System.IO.Path.Combine(_path, dir)
+				).FullName;
+
+			Directory.SetCurrentDirectory(path);
+			Environment.SetEnvironmentVariable("GST_DEBUG", "3");
+
+			if (cDev != null && ckbxCamera.Active)
+			{
+				int gop = 450;
+
+				cargs = " flvmux name=camera ! filesink location=\"camera.flv\"";
+
+				cargs += String.Format(" v4l2src device =\"{0}\"", cDev.device.ToString());
+				cargs += String.Format(" ! video/x-raw-yuv, framerate = {0}/{1}, width={2}, height={3}" +
+				                       " ! videorate ! video/x-raw-yuv, framerate = {4}/1" +
+				                       " ! queue ! ffenc_flv name = cv gop-size = {5} ! camera.",
+				                       cDev.framerate.Numerator, cDev.framerate.Denominator, cDev.width, cDev.height,
+				                       30, gop);
+				if (aargs != null)
+				{
+					//cargs += " audio. ! queue ! audio/mpeg ! camera.";
+					cargs += " audio. ! queue ! audio/x-adpcm ! camera.";
+				}
+
+			}
+
+			if (ckbxDisplay.Active)//sDev != null)
+			{
+				int gop = 150;
+				sargs = " flvmux name=\"screen\" ! filesink location=\"screen.flv\"";
+
+				sargs += " ximagesrc use-damage=false";
+				sargs += String.Format(" ! video/x-raw-rgb, framerate = {0}/1" +
+				                       " ! ffmpegcolorspace ! queue " +
+				                       " ! ffenc_flashsv name=sv gop-size = {1} ! screen.",
+				                       5, gop);
+
+
+				if (aargs != null)
+				{
+					// sargs += " audio. ! queue ! audio/mpeg ! screen.";
+					sargs += " audio. ! queue ! audio/x-adpcm ! screen.";
+				}
+
+			}
+
+			try
+			{
+				String final =  cargs + sargs + aargs;
+				gstRecording = (Gst.Pipeline)Gst.Parse.Launch(final);
+
+				lblStatus.Text = "Recording";
+
 			}
 			catch (Exception error)
 			{
@@ -253,6 +446,7 @@ public partial class MainWindow: Gtk.Window
 			gstRecording = null;
 		}
 
+
 		isRecording = false;
 
 	}
@@ -273,6 +467,7 @@ public partial class MainWindow: Gtk.Window
 		dialog.Destroy ();
 
 	}
+
 
 }
 
